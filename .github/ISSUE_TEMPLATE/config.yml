@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security report
+    url: https://github.com/Useless007/content-blueprint/security/advisories/new
+    about: รายงานช่องโหว่แบบส่วนตัวและอย่าเปิดเผย exploit หรือ secret ใน public issue
+  - name: Quick start
+    url: https://github.com/Useless007/content-blueprint/blob/main/docs/quick-start.md
+    about: ตรวจขั้นตอนติดตั้ง, CLI, extension, MCP และ updater ก่อนเปิด bug

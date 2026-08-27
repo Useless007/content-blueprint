@@ -1,0 +1,9 @@
+{
+  "name": "com.contentblueprint.facebook",
+  "description": "Content Blueprint Facebook Companion",
+  "path": "content-blueprint-companion.exe",
+  "type": "stdio",
+  "allowed_origins": [
+    "chrome-extension://ppncejmpiekmkepaeccdnpnpgdcfafje/"
+  ]
+}

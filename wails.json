@@ -1,0 +1,20 @@
+{
+  "$schema": "https://wails.io/schemas/config.v2.json",
+  "name": "ContentBlueprint",
+  "outputfilename": "content-blueprint",
+  "frontend:install": "npm ci",
+  "frontend:build": "npm run build",
+  "frontend:dev:watcher": "npm run dev",
+  "frontend:dev:serverUrl": "auto",
+  "info": {
+    "companyName": "Useless007",
+    "productName": "Content Blueprint",
+    "productVersion": "0.3.0",
+    "copyright": "Copyright (c) 2026 Useless007",
+    "comments": "Local-first Windows content operations workspace"
+  },
+  "author": {
+    "name": "Useless007",
+    "email": "43708154+Useless007@users.noreply.github.com"
+  }
+}

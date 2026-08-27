@@ -1,0 +1,33 @@
+body {
+  min-height: 100dvh;
+  overflow: auto;
+  background: var(--color-background);
+}
+
+.update-harness {
+  width: min(100% - 32px, 760px);
+  margin: 0 auto;
+  padding: 96px 0 48px;
+}
+
+.update-harness > span {
+  color: var(--color-primary-strong);
+  font-size: 0.75rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.update-harness h1 {
+  margin: 8px 0;
+  color: var(--color-foreground);
+  font-size: clamp(1.6rem, 5vw, 3rem);
+}
+
+.update-harness p {
+  max-width: 60ch;
+  margin: 0;
+  color: var(--color-muted-foreground);
+  font-size: 1rem;
+  line-height: 1.6;
+}

@@ -1,0 +1,283 @@
+<!doctype html>
+<html lang="th">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light" />
+    <title>Content Blueprint for Facebook</title>
+    <link rel="stylesheet" href="sidepanel.css" />
+  </head>
+  <body>
+    <header class="app-header">
+      <div class="brand" aria-label="Content Blueprint for Facebook">
+        <span class="brand-mark" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="22" height="22" fill="none">
+            <path d="M7 3.75h7.5L18 7.25v13H7z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" />
+            <path d="M14.5 3.75v3.5H18M9.75 11h5.5M9.75 14.5h5.5M9.75 18h3.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
+          </svg>
+        </span>
+        <span class="brand-copy">
+          <strong>Content Blueprint</strong>
+          <small>Facebook Content Pack</small>
+        </span>
+      </div>
+
+      <button
+        class="icon-button"
+        id="settingsToggle"
+        type="button"
+        aria-controls="settingsPanel"
+        aria-expanded="false"
+        aria-label="เปิดการตั้งค่า Gemini API key"
+        title="ตั้งค่า Gemini API key"
+      >
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" aria-hidden="true">
+          <path d="M14.5 9.5a4 4 0 1 0-5 5L4 20h4v-2h2v-2h2l1.5-1.5a4 4 0 0 0 1-5Z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
+          <circle cx="15" cy="9" r="1" fill="currentColor" />
+        </svg>
+      </button>
+    </header>
+
+    <div class="status status--info" id="appStatus" role="status" aria-live="polite" aria-atomic="true">
+      พร้อมสร้างชุดคอนเทนต์ — ระบบจะไม่โพสต์ให้อัตโนมัติ
+    </div>
+
+    <main>
+      <section class="panel companion-panel" aria-labelledby="companionHeading">
+        <div class="section-heading section-heading--compact">
+          <div>
+            <p class="eyebrow">ไม่ต้องใช้ API key แยก</p>
+            <h2 id="companionHeading">รับงานจาก Wails / Claude / Codex</h2>
+          </div>
+          <span class="key-state" id="companionState" data-state="checking">กำลังตรวจ</span>
+        </div>
+        <p class="helper-text">
+          ให้โปรแกรม Content Blueprint สั่ง Claude หรือ Codex ที่ล็อกอินไว้ แล้วรับ Content Pack ล่าสุดมาใช้ใน Facebook
+        </p>
+        <div class="button-row companion-actions">
+          <button class="button button--primary button--grow" id="fetchCompanionPack" type="button">
+            รับผลล่าสุด
+          </button>
+          <button class="button button--quiet button--grow" id="syncCompanionBrief" type="button">
+            ส่งโจทย์เข้า MCP
+          </button>
+        </div>
+        <p class="helper-text companion-hint">
+          MCP เป็นทางเลือกสำหรับตอนเปิด Claude/Codex เอง: ส่งโจทย์ก่อน แล้วบอกให้สร้าง Facebook Content Pack จาก brief ล่าสุด
+        </p>
+      </section>
+
+      <section class="panel growth-panel" aria-labelledby="growthHeading">
+        <div class="section-heading section-heading--compact">
+          <div>
+            <p class="eyebrow">Growth Hub</p>
+            <h2 id="growthHeading">Growth Pack ล่าสุด</h2>
+          </div>
+          <span class="key-state" id="growthState" data-state="idle">ยังไม่โหลด</span>
+        </div>
+        <p class="helper-text">
+          รับร่างล่าสุดจาก Content Blueprint ในเครื่อง Extension ไม่อ่านฐานลูกค้า ไม่ scrape เพจ ไม่โพสต์ และไม่ส่งข้อความอัตโนมัติ
+        </p>
+        <button class="button button--primary" id="growthFetch" type="button">รับ Growth Pack ล่าสุด</button>
+        <div class="growth-results" id="growthResults" hidden>
+          <div class="growth-warning" id="growthWarning" role="status" aria-live="polite"></div>
+          <div class="growth-meta" id="growthMeta"></div>
+          <label class="growth-confirm" id="growthConfirmWrap" for="growthPendingConfirm" hidden>
+            <input id="growthPendingConfirm" type="checkbox" />
+            <span>ฉันตรวจร่างนี้แล้ว และต้องการแทรกข้อความด้วยตัวเอง</span>
+          </label>
+          <div class="button-row">
+            <button class="button button--quiet" id="growthCopyAll" type="button">คัดลอกทั้งหมด</button>
+            <button class="button button--quiet" id="growthInsertAll" type="button">แทรกทั้งหมดในช่องที่โฟกัส</button>
+          </div>
+          <div id="growthBlocks"></div>
+        </div>
+      </section>
+
+      <section class="settings-panel" id="settingsPanel" aria-labelledby="settingsHeading" hidden>
+        <div class="section-heading section-heading--compact">
+          <div>
+            <p class="eyebrow">การเชื่อมต่อ</p>
+            <h2 id="settingsHeading">Gemini API key</h2>
+          </div>
+          <span class="key-state" id="keyState" data-state="missing">ยังไม่ได้ตั้งค่า</span>
+        </div>
+
+        <p class="helper-text" id="apiKeyHelp">
+          ใช้เฉพาะเมื่อต้องการสร้างด้วย Gemini ใน extension โดยตรง หากใช้ Wails / Claude / Codex ไม่ต้องกรอก
+          key จะเก็บเฉพาะเซสชัน Chrome นี้ ไม่รวมใน Draft
+        </p>
+
+        <label class="field-label" for="apiKey">API key</label>
+        <input
+          class="text-input"
+          id="apiKey"
+          type="password"
+          autocomplete="off"
+          spellcheck="false"
+          aria-describedby="apiKeyHelp"
+          placeholder="วาง API key แล้วกดบันทึก"
+        />
+
+        <div class="button-row button-row--settings">
+          <button class="button button--primary" id="saveApiKey" type="button">บันทึกในเซสชัน</button>
+          <button class="button button--danger-quiet" id="clearApiKey" type="button">ล้าง API key</button>
+          <button class="button button--quiet" id="closeSettings" type="button">ปิด</button>
+        </div>
+      </section>
+
+      <section class="panel" aria-labelledby="briefHeading">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">ขั้นตอนที่ 1</p>
+            <h1 id="briefHeading">กำหนดโจทย์คอนเทนต์</h1>
+          </div>
+        </div>
+
+        <div class="draft-toolbar" aria-label="จัดการ Draft">
+          <button class="button button--quiet button--grow" id="saveDraft" type="button">บันทึก Draft</button>
+          <button class="button button--quiet button--grow" id="loadDraft" type="button">โหลด Draft</button>
+        </div>
+
+        <form id="briefForm">
+          <div class="field-group">
+            <label class="field-label" for="campaignProduct">
+              แคมเปญหรือสินค้า <span class="required-mark" aria-hidden="true">*</span>
+            </label>
+            <input
+              class="text-input"
+              id="campaignProduct"
+              name="campaignProduct"
+              type="text"
+              required
+              maxlength="240"
+              autocomplete="off"
+              placeholder="เช่น คอร์สวางแผนการตลาด รุ่น 12"
+            />
+          </div>
+
+          <div class="field-group">
+            <label class="field-label" for="audience">
+              กลุ่มเป้าหมาย <span class="required-mark" aria-hidden="true">*</span>
+            </label>
+            <textarea
+              class="text-area text-area--short"
+              id="audience"
+              name="audience"
+              required
+              maxlength="800"
+              placeholder="เขาเป็นใคร มีปัญหาอะไร และรู้อะไรมาแล้วบ้าง"
+            ></textarea>
+          </div>
+
+          <div class="field-group">
+            <label class="field-label" for="objective">
+              เป้าหมายของโพสต์ <span class="required-mark" aria-hidden="true">*</span>
+            </label>
+            <input
+              class="text-input"
+              id="objective"
+              name="objective"
+              type="text"
+              required
+              maxlength="300"
+              autocomplete="off"
+              placeholder="เช่น ให้คนทักแชตเพื่อขอรายละเอียด"
+            />
+          </div>
+
+          <div class="field-group">
+            <label class="field-label" for="offer">ข้อเสนอ</label>
+            <textarea
+              class="text-area text-area--short"
+              id="offer"
+              name="offer"
+              maxlength="1200"
+              placeholder="ราคา โบนัส กำหนดเวลา หรือเงื่อนไขสำคัญ"
+            ></textarea>
+          </div>
+
+          <div class="field-group">
+            <label class="field-label" for="brandVoice">น้ำเสียงของอาจารย์/แบรนด์</label>
+            <input
+              class="text-input"
+              id="brandVoice"
+              name="brandVoice"
+              type="text"
+              maxlength="300"
+              autocomplete="off"
+              placeholder="เช่น สุภาพ ตรงประเด็น มีเหตุผล ไม่ขายเกินจริง"
+            />
+          </div>
+
+          <div class="field-group">
+            <label class="field-label" for="evidence">หลักฐานและข้อเท็จจริงที่ยืนยันแล้ว</label>
+            <textarea
+              class="text-area"
+              id="evidence"
+              name="evidence"
+              maxlength="6000"
+              aria-describedby="evidenceHelp"
+              placeholder="หนึ่งรายการต่อบรรทัด เช่น ยอดผู้เรียน 1,200 คน | https://example.com/source"
+            ></textarea>
+            <p class="helper-text" id="evidenceHelp">
+              ใส่เฉพาะข้อมูลที่ตรวจสอบได้ หากมี URL ให้คั่นด้วยเครื่องหมาย |
+            </p>
+          </div>
+
+          <div class="field-group">
+            <label class="field-label" for="constraints">ข้อจำกัดและคำสั่งเพิ่มเติม</label>
+            <textarea
+              class="text-area"
+              id="constraints"
+              name="constraints"
+              maxlength="3000"
+              placeholder="คำที่ห้ามใช้ ความยาว เงื่อนไขทางกฎหมาย หรือ CTA ที่ต้องการ"
+            ></textarea>
+          </div>
+
+          <label class="check-row" for="useGrounding">
+            <input id="useGrounding" name="useGrounding" type="checkbox" checked />
+            <span>
+              <strong>ค้นหาแหล่งข้อมูลประกอบ</strong>
+              <small>ให้โมเดลใช้ Search/URL grounding และแสดงแหล่งอ้างอิงที่พบ</small>
+            </span>
+          </label>
+
+          <button class="button button--generate" id="generateButton" type="submit">
+            <span class="spinner" id="generateSpinner" aria-hidden="true" hidden></span>
+            <span id="generateLabel">สร้างด้วย Gemini API</span>
+          </button>
+        </form>
+      </section>
+
+      <section class="panel results" id="resultsSection" aria-labelledby="resultsHeading" aria-busy="false" hidden>
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">ขั้นตอนที่ 2</p>
+            <h2 id="resultsHeading">ชุดคอนเทนต์พร้อมใช้</h2>
+          </div>
+        </div>
+
+        <p class="safety-note">
+          ปุ่ม “แทรกใน Facebook” เติมข้อความลง Composer ที่โฟกัสล่าสุดเท่านั้น กรุณาตรวจทานและกดโพสต์ด้วยตัวเอง
+        </p>
+
+        <div class="result-meta" id="resultMeta" aria-label="รายละเอียดผลลัพธ์"></div>
+        <div class="tab-list" id="outputTabList" role="tablist" aria-label="ประเภทคอนเทนต์"></div>
+        <div id="outputPanels"></div>
+
+        <details class="sources" id="sourcesDetails" hidden>
+          <summary>แหล่งอ้างอิง <span id="sourceCount"></span></summary>
+          <ol id="sourceList"></ol>
+        </details>
+      </section>
+    </main>
+
+    <template id="emptyOutputTemplate">
+      <p class="empty-output">โมเดลไม่ได้ส่งเนื้อหาในส่วนนี้กลับมา</p>
+    </template>
+
+    <script type="module" src="sidepanel.js"></script>
+  </body>
+</html>

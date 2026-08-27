@@ -1,0 +1,14 @@
+build/bin
+node_modules
+frontend/dist
+build/windows/installer/.payload/
+build/windows/installer/tmp/
+build/qa/
+artifacts/
+test-results/
+coverage/
+.tools/
+*.log
+.env
+.env.*
+!.env.example

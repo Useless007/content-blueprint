@@ -1,0 +1,19 @@
+{
+	"fixed": {
+		"file_version": "{{.Info.ProductVersion}}",
+		"product_version": "{{.Info.ProductVersion}}"
+	},
+	"info": {
+		"0409": {
+			"FileVersion": "{{.Info.ProductVersion}}",
+			"ProductVersion": "{{.Info.ProductVersion}}",
+			"CompanyName": "{{.Info.CompanyName}}",
+			"FileDescription": "{{.Info.ProductName}}",
+			"InternalName": "content-blueprint",
+			"LegalCopyright": "{{.Info.Copyright}}",
+			"OriginalFilename": "content-blueprint.exe",
+			"ProductName": "{{.Info.ProductName}}",
+			"Comments": "{{.Info.Comments}}"
+		}
+	}
+}

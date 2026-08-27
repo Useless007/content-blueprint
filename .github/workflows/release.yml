@@ -1,0 +1,566 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing stable tag to build and publish, for example v0.3.0
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.repository }}-${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    name: Validate tag and test
+    runs-on: windows-latest
+    timeout-minutes: 45
+    outputs:
+      release_tag: ${{ steps.release.outputs.tag }}
+      version: ${{ steps.release.outputs.version }}
+      commit_sha: ${{ steps.source.outputs.commit_sha }}
+    env:
+      CI: "true"
+    steps:
+      - name: Resolve and validate release tag
+        id: release
+        shell: pwsh
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          INPUT_TAG: ${{ inputs.tag }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          $ErrorActionPreference = "Stop"
+          $candidate = if ($env:EVENT_NAME -eq "workflow_dispatch") {
+            $env:INPUT_TAG.Trim()
+          }
+          else {
+            $env:REF_NAME.Trim()
+          }
+          if ($candidate -cnotmatch '^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$') {
+            throw "Release tag must be a stable semantic version such as v0.3.0"
+          }
+          "tag=$candidate" >> $env:GITHUB_OUTPUT
+          "version=$($candidate.Substring(1))" >> $env:GITHUB_OUTPUT
+
+      - name: Check out tagged source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ steps.release.outputs.tag }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Verify tag and version agreement
+        id: source
+        shell: pwsh
+        env:
+          RELEASE_TAG: ${{ steps.release.outputs.tag }}
+          RELEASE_VERSION: ${{ steps.release.outputs.version }}
+        run: |
+          $ErrorActionPreference = "Stop"
+          git show-ref --verify --quiet "refs/tags/$env:RELEASE_TAG"
+          if ($LASTEXITCODE -ne 0) { throw "Tag does not exist: $env:RELEASE_TAG" }
+          $tagCommit = (git rev-list -n 1 $env:RELEASE_TAG).Trim()
+          $headCommit = (git rev-parse HEAD).Trim()
+          if ($tagCommit -ne $headCommit) { throw "Checked-out commit does not match the tag" }
+          "commit_sha=$headCommit" >> $env:GITHUB_OUTPUT
+
+          $rootVersion = (Get-Content -LiteralPath VERSION -Raw -Encoding UTF8).Trim()
+          if ($rootVersion -cne $env:RELEASE_VERSION) {
+            throw "VERSION is $rootVersion, expected $env:RELEASE_VERSION"
+          }
+          $manifest = Get-Content -LiteralPath facebook-extension\manifest.json -Raw -Encoding UTF8 | ConvertFrom-Json
+          $package = Get-Content -LiteralPath facebook-extension\package.json -Raw -Encoding UTF8 | ConvertFrom-Json
+          if ($manifest.version -cne $env:RELEASE_VERSION -or $package.version -cne $env:RELEASE_VERSION) {
+            throw "Extension versions do not match $env:RELEASE_VERSION"
+          }
+          $escaped = [regex]::Escape($env:RELEASE_VERSION)
+          $versionSource = Get-Content -LiteralPath internal\versioninfo\version.go -Raw -Encoding UTF8
+          if ($versionSource -notmatch "CurrentVersion\s*=\s*`"$escaped`"") {
+            throw "internal/versioninfo does not match $env:RELEASE_VERSION"
+          }
+          $installerSource = Get-Content -LiteralPath build\windows\installer\project.nsi -Raw -Encoding UTF8
+          if ($installerSource -notmatch "!define INFO_PRODUCTVERSION `"$escaped`"") {
+            throw "NSIS product version does not match $env:RELEASE_VERSION"
+          }
+          .\build\verify-version.ps1 -ExpectedVersion $env:RELEASE_VERSION
+
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22.12.0
+          cache: npm
+          cache-dependency-path: |
+            frontend/package-lock.json
+            facebook-extension/package-lock.json
+
+      - name: Install JavaScript dependencies and build frontend
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          npm ci --prefix frontend
+          if ($LASTEXITCODE -ne 0) { throw "frontend npm ci failed" }
+          npm run build --prefix frontend
+          if ($LASTEXITCODE -ne 0) { throw "frontend build failed" }
+          npm run test:ui --prefix frontend
+          if ($LASTEXITCODE -ne 0) { throw "frontend updater UI tests failed" }
+          npm ci --prefix facebook-extension
+          if ($LASTEXITCODE -ne 0) { throw "extension npm ci failed" }
+
+      - name: Test Go and extension
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          go test ./...
+          if ($LASTEXITCODE -ne 0) { throw "go test failed" }
+          go vet ./...
+          if ($LASTEXITCODE -ne 0) { throw "go vet failed" }
+          go run golang.org/x/vuln/cmd/govulncheck@v1.7.0 ./...
+          if ($LASTEXITCODE -ne 0) { throw "govulncheck found a reachable vulnerability" }
+          Push-Location facebook-extension
+          try {
+            npm test
+            if ($LASTEXITCODE -ne 0) { throw "extension tests failed" }
+            foreach ($file in @("service-worker.js", "sidepanel.js", "content-script.js", "src/core.js", "src/growth.js")) {
+              node --check $file
+              if ($LASTEXITCODE -ne 0) { throw "syntax check failed: $file" }
+            }
+          }
+          finally {
+            Pop-Location
+          }
+
+      - name: Install Brave for browser smoke
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          if (-not (Test-Path -LiteralPath "C:\Program Files\Google\Chrome\Application\chrome.exe" -PathType Leaf)) {
+            throw "Google Chrome is missing from the hosted runner"
+          }
+          if (-not (Test-Path -LiteralPath "C:\Program Files\BraveSoftware\Brave-Browser\Application\brave.exe" -PathType Leaf)) {
+            choco install brave -y --no-progress
+            if ($LASTEXITCODE -ne 0) { throw "Brave installation failed" }
+          }
+
+      - name: Build and register test companion
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          New-Item -ItemType Directory -Path build\bin -Force | Out-Null
+          go build -trimpath -o build\bin\content-blueprint-companion.exe .\cmd\content-blueprint-companion
+          if ($LASTEXITCODE -ne 0) { throw "companion build failed" }
+          .\facebook-extension\native-host\install-native-host.ps1
+
+      - name: Run extension E2E
+        working-directory: facebook-extension
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          npm run test:e2e
+          if ($LASTEXITCODE -ne 0) { throw "browser extension E2E failed" }
+
+      - name: Run Wails UI smoke
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $frontendDirectory = Join-Path $PWD "frontend"
+          $stdoutPath = Join-Path $env:RUNNER_TEMP "content-blueprint-preview.stdout.log"
+          $stderrPath = Join-Path $env:RUNNER_TEMP "content-blueprint-preview.stderr.log"
+          $preview = Start-Process -FilePath "npm.cmd" `
+            -ArgumentList @("run", "preview", "--", "--host", "127.0.0.1", "--port", "4173") `
+            -WorkingDirectory $frontendDirectory `
+            -RedirectStandardOutput $stdoutPath `
+            -RedirectStandardError $stderrPath `
+            -WindowStyle Hidden `
+            -PassThru
+          try {
+            $ready = $false
+            for ($attempt = 0; $attempt -lt 30; $attempt++) {
+              try {
+                $response = Invoke-WebRequest -Uri "http://127.0.0.1:4173" -TimeoutSec 2
+                if ($response.StatusCode -eq 200) { $ready = $true; break }
+              }
+              catch {
+                Start-Sleep -Seconds 1
+              }
+            }
+            if (-not $ready) {
+              Get-Content -LiteralPath $stdoutPath -ErrorAction SilentlyContinue
+              Get-Content -LiteralPath $stderrPath -ErrorAction SilentlyContinue
+              throw "frontend preview did not become ready"
+            }
+            Push-Location facebook-extension
+            try {
+              npm run test:wails-ui
+              if ($LASTEXITCODE -ne 0) { throw "Wails UI smoke failed" }
+            }
+            finally {
+              Pop-Location
+            }
+          }
+          finally {
+            if ($preview -and -not $preview.HasExited) {
+              Stop-Process -Id $preview.Id -Force
+            }
+          }
+
+      - name: Remove test Native Messaging registration
+        if: always()
+        shell: pwsh
+        run: .\facebook-extension\native-host\uninstall-native-host.ps1
+
+  package:
+    name: Build Windows artifacts
+    needs: validate
+    runs-on: windows-latest
+    timeout-minutes: 35
+    steps:
+      - name: Check out tagged source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.validate.outputs.commit_sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22.12.0
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install Wails and NSIS
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          go install github.com/wailsapp/wails/v2/cmd/wails@v2.15.0
+          if ($LASTEXITCODE -ne 0) { throw "Wails CLI installation failed" }
+          $goBin = Join-Path (go env GOPATH) "bin"
+          if (-not (Test-Path -LiteralPath (Join-Path $goBin "wails.exe") -PathType Leaf)) {
+            throw "wails.exe was not installed"
+          }
+          $goBin >> $env:GITHUB_PATH
+          choco install nsis --version=3.12.0 -y --no-progress --allow-downgrade
+          if ($LASTEXITCODE -ne 0) { throw "NSIS installation failed" }
+          choco install 7zip.install --version=26.2.0 -y --no-progress --allow-downgrade
+          if ($LASTEXITCODE -ne 0) { throw "7-Zip installation failed" }
+
+      - name: Restore frontend dependencies
+        working-directory: frontend
+        shell: pwsh
+        run: |
+          npm ci
+          if ($LASTEXITCODE -ne 0) { throw "frontend npm ci failed" }
+
+      - name: Build release artifacts
+        shell: pwsh
+        run: .\build\windows\build-release.ps1 -SkipTests
+
+      - name: Verify release artifacts and checksums
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $bin = Join-Path $PWD "build\bin"
+          $artifactNames = @(
+            "content-blueprint-amd64-installer.exe",
+            "content-blueprint.exe",
+            "content-blueprint-companion.exe"
+          )
+          $entries = @{}
+          foreach ($line in Get-Content -LiteralPath (Join-Path $bin "SHA256SUMS.txt") -Encoding UTF8) {
+            if ($line -notmatch '^([0-9a-f]{64})\s+\*?(.+)$') { throw "Invalid checksum line: $line" }
+            if ($entries.ContainsKey($Matches[2])) { throw "Duplicate checksum entry: $($Matches[2])" }
+            $entries[$Matches[2]] = $Matches[1]
+          }
+          foreach ($name in $artifactNames) {
+            $path = Join-Path $bin $name
+            if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { throw "Missing artifact: $name" }
+            if ((Get-Item -LiteralPath $path).Length -le 0) { throw "Empty artifact: $name" }
+            $actual = (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash.ToLowerInvariant()
+            if ($entries[$name] -cne $actual) { throw "Checksum mismatch: $name" }
+          }
+          if ($entries.Count -ne $artifactNames.Count) { throw "SHA256SUMS.txt contains unexpected entries" }
+
+      - name: Smoke-test clean install, upgrade, and uninstall
+        shell: pwsh
+        env:
+          RELEASE_VERSION: ${{ needs.validate.outputs.version }}
+        run: |
+          $ErrorActionPreference = "Stop"
+          $installer = Join-Path $PWD "build\bin\content-blueprint-amd64-installer.exe"
+          $installDirectory = Join-Path $env:LOCALAPPDATA "Programs\Content Blueprint"
+          $manifestPath = Join-Path $installDirectory "native-host\com.contentblueprint.facebook.json"
+          $uninstallKey = "Software\Microsoft\Windows\CurrentVersion\Uninstall\ContentBlueprint"
+          $nativeKeys = @(
+            "Software\Google\Chrome\NativeMessagingHosts\com.contentblueprint.facebook",
+            "Software\BraveSoftware\Brave-Browser\NativeMessagingHosts\com.contentblueprint.facebook"
+          )
+          if (Test-Path -LiteralPath $installDirectory) {
+            throw "Hosted runner is not clean: install directory already exists"
+          }
+
+          function Invoke-Installer {
+            $process = Start-Process -FilePath $installer -ArgumentList "/S" -Wait -PassThru -WindowStyle Hidden
+            if ($process.ExitCode -ne 0) { throw "Installer exited with code $($process.ExitCode)" }
+          }
+
+          function Assert-RegistryValue {
+            param(
+              [Parameter(Mandatory = $true)]
+              [Microsoft.Win32.RegistryView]$View,
+              [Parameter(Mandatory = $true)]
+              [string]$Subkey,
+              [Parameter(Mandatory = $true)]
+              [string]$Expected
+            )
+            $base = [Microsoft.Win32.RegistryKey]::OpenBaseKey(
+              [Microsoft.Win32.RegistryHive]::CurrentUser,
+              $View
+            )
+            try {
+              $key = $base.OpenSubKey($Subkey)
+              if (-not $key) { throw "Registry key is missing in ${View}: $Subkey" }
+              try { $actual = [string]$key.GetValue("") }
+              finally { $key.Dispose() }
+            }
+            finally { $base.Dispose() }
+            if ($actual -cne $Expected) {
+              throw "Registry value mismatch in ${View}: $Subkey"
+            }
+          }
+
+          function Assert-RegistryKeyAbsent {
+            param(
+              [Parameter(Mandatory = $true)]
+              [Microsoft.Win32.RegistryView]$View,
+              [Parameter(Mandatory = $true)]
+              [string]$Subkey
+            )
+            $base = [Microsoft.Win32.RegistryKey]::OpenBaseKey(
+              [Microsoft.Win32.RegistryHive]::CurrentUser,
+              $View
+            )
+            try { $key = $base.OpenSubKey($Subkey) }
+            finally { $base.Dispose() }
+            if ($key) {
+              $key.Dispose()
+              throw "Registry key remains after uninstall in ${View}: $Subkey"
+            }
+          }
+
+          # The second pass exercises the in-place upgrade path used by the updater.
+          Invoke-Installer
+          Invoke-Installer
+
+          $expectedFiles = @(
+            "content-blueprint.exe",
+            "uninstall.exe",
+            "INSTALLATION.txt",
+            "native-host\content-blueprint-companion.exe",
+            "native-host\com.contentblueprint.facebook.json",
+            "facebook-extension\manifest.json",
+            "facebook-extension\icon.png",
+            "facebook-extension\service-worker.js",
+            "facebook-extension\content-script.js",
+            "facebook-extension\sidepanel.html",
+            "facebook-extension\sidepanel.css",
+            "facebook-extension\sidepanel.js",
+            "facebook-extension\src\core.js",
+            "facebook-extension\src\growth.js"
+          )
+          foreach ($relativePath in $expectedFiles) {
+            $path = Join-Path $installDirectory $relativePath
+            if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
+              throw "Installed payload is missing: $relativePath"
+            }
+          }
+          $companion = Join-Path $installDirectory "native-host\content-blueprint-companion.exe"
+          $companionVersion = (& $companion --version).Trim()
+          if ($LASTEXITCODE -ne 0 -or $companionVersion -cne $env:RELEASE_VERSION) {
+            throw "Installed companion version check failed"
+          }
+          foreach ($view in @(
+            [Microsoft.Win32.RegistryView]::Registry32,
+            [Microsoft.Win32.RegistryView]::Registry64
+          )) {
+            foreach ($nativeKey in $nativeKeys) {
+              Assert-RegistryValue -View $view -Subkey $nativeKey -Expected $manifestPath
+            }
+          }
+
+          $uninstaller = Join-Path $installDirectory "uninstall.exe"
+          $uninstall = Start-Process -FilePath $uninstaller -ArgumentList "/S" -Wait -PassThru -WindowStyle Hidden
+          if ($uninstall.ExitCode -ne 0) { throw "Uninstaller exited with code $($uninstall.ExitCode)" }
+          for ($attempt = 0; $attempt -lt 20 -and (Test-Path -LiteralPath $installDirectory); $attempt++) {
+            Start-Sleep -Milliseconds 500
+          }
+          if (Test-Path -LiteralPath $installDirectory) {
+            throw "Install directory remains after uninstall"
+          }
+          foreach ($view in @(
+            [Microsoft.Win32.RegistryView]::Registry32,
+            [Microsoft.Win32.RegistryView]::Registry64
+          )) {
+            foreach ($nativeKey in $nativeKeys) {
+              Assert-RegistryKeyAbsent -View $view -Subkey $nativeKey
+            }
+            Assert-RegistryKeyAbsent -View $view -Subkey $uninstallKey
+          }
+
+      - name: Stage workflow artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: content-blueprint-${{ needs.validate.outputs.release_tag }}
+          path: |
+            build/bin/content-blueprint-amd64-installer.exe
+            build/bin/content-blueprint.exe
+            build/bin/content-blueprint-companion.exe
+            build/bin/SHA256SUMS.txt
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    name: Publish GitHub Release
+    needs:
+      - validate
+      - package
+    runs-on: windows-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    steps:
+      - name: Check out tagged release notes
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.validate.outputs.commit_sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Download validated artifacts
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: content-blueprint-${{ needs.validate.outputs.release_tag }}
+          path: release-assets
+
+      - name: Recheck downloaded artifacts
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $artifactNames = @(
+            "content-blueprint-amd64-installer.exe",
+            "content-blueprint.exe",
+            "content-blueprint-companion.exe"
+          )
+          $entries = @{}
+          foreach ($line in Get-Content -LiteralPath release-assets\SHA256SUMS.txt -Encoding UTF8) {
+            if ($line -notmatch '^([0-9a-f]{64})\s+\*?(.+)$') { throw "Invalid checksum line: $line" }
+            if ($entries.ContainsKey($Matches[2])) { throw "Duplicate checksum entry: $($Matches[2])" }
+            $entries[$Matches[2]] = $Matches[1]
+          }
+          foreach ($name in $artifactNames) {
+            $path = Join-Path "release-assets" $name
+            if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { throw "Missing artifact: $name" }
+            $actual = (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash.ToLowerInvariant()
+            if ($entries[$name] -cne $actual) { throw "Checksum mismatch after artifact transfer: $name" }
+          }
+
+      - name: Create draft, verify assets, and publish
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ needs.validate.outputs.release_tag }}
+          VALIDATED_COMMIT: ${{ needs.validate.outputs.commit_sha }}
+        run: |
+          $ErrorActionPreference = "Stop"
+          if ($env:RELEASE_TAG -cnotmatch '^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$') {
+            throw "Validated release tag was lost"
+          }
+          $remoteLines = @(git ls-remote origin "refs/tags/$env:RELEASE_TAG" "refs/tags/$env:RELEASE_TAG^{}")
+          if ($LASTEXITCODE -ne 0 -or $remoteLines.Count -lt 1) {
+            throw "Release tag is missing from origin: $env:RELEASE_TAG"
+          }
+          $peeled = @($remoteLines | Where-Object { $_ -match '\^\{\}$' })
+          $remoteCommit = if ($peeled.Count -eq 1) {
+            ($peeled[0] -split '\s+')[0]
+          }
+          elseif ($peeled.Count -eq 0 -and $remoteLines.Count -eq 1) {
+            ($remoteLines[0] -split '\s+')[0]
+          }
+          else {
+            throw "Release tag did not resolve to one commit"
+          }
+          if ($remoteCommit -cne $env:VALIDATED_COMMIT) {
+            throw "Release tag moved after validation"
+          }
+          gh release view $env:RELEASE_TAG --repo $env:GH_REPO --json tagName 2>$null
+          if ($LASTEXITCODE -eq 0) {
+            throw "Release already exists; this workflow will not replace or clobber it"
+          }
+
+          $assets = @(
+            "release-assets/content-blueprint-amd64-installer.exe",
+            "release-assets/content-blueprint.exe",
+            "release-assets/content-blueprint-companion.exe",
+            "release-assets/SHA256SUMS.txt"
+          )
+          $ghArgs = @(
+            "release", "create", $env:RELEASE_TAG
+          ) + $assets + @(
+            "--repo", $env:GH_REPO,
+            "--verify-tag",
+            "--draft",
+            "--title", "Content Blueprint $env:RELEASE_TAG"
+          )
+          $notesPath = "docs/release-notes/$env:RELEASE_TAG.md"
+          if (Test-Path -LiteralPath $notesPath -PathType Leaf) {
+            $ghArgs += @("--notes-file", $notesPath)
+          }
+          else {
+            $ghArgs += "--generate-notes"
+          }
+          gh @ghArgs
+          if ($LASTEXITCODE -ne 0) { throw "Draft release creation failed" }
+
+          $release = gh release view $env:RELEASE_TAG --repo $env:GH_REPO --json tagName,isDraft,assets | ConvertFrom-Json
+          if ($release.tagName -cne $env:RELEASE_TAG -or -not $release.isDraft) {
+            throw "Release identity or draft state is invalid"
+          }
+          $expectedNames = @(
+            "content-blueprint-amd64-installer.exe",
+            "content-blueprint.exe",
+            "content-blueprint-companion.exe",
+            "SHA256SUMS.txt"
+          )
+          foreach ($name in $expectedNames) {
+            $asset = @($release.assets | Where-Object name -CEQ $name)
+            if ($asset.Count -ne 1 -or [int64]$asset[0].size -le 0) {
+              throw "Draft release asset is missing, duplicate, or empty: $name"
+            }
+          }
+          if (@($release.assets).Count -ne $expectedNames.Count) {
+            throw "Draft release contains unexpected assets"
+          }
+
+          gh release edit $env:RELEASE_TAG --repo $env:GH_REPO --draft=false --latest
+          if ($LASTEXITCODE -ne 0) { throw "Release publication failed; inspect the retained draft" }

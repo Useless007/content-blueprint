@@ -1,0 +1,62 @@
+Content Blueprint 0.3.0
+=======================
+
+ส่วนประกอบที่ติดตั้ง
+--------------------
+- content-blueprint.exe: แอป Wails สำหรับ Facebook, Growth Hub และ SEO
+- native-host\content-blueprint-companion.exe: MCP server และ Chrome/Brave
+  Native Messaging host
+- facebook-extension\: Manifest V3 extension v0.3 แบบ Load unpacked
+
+ติดตั้ง Extension
+-----------------
+1. เปิด chrome://extensions หรือ brave://extensions
+2. เปิด Developer mode แล้วกด Load unpacked
+3. เลือกโฟลเดอร์ facebook-extension ที่อยู่ข้างไฟล์นี้
+4. ตรวจว่า Extension ID คือ ppncejmpiekmkepaeccdnpnpgdcfafje
+
+ตัวติดตั้งลงทะเบียน Native Messaging แบบ per-user ให้ Chrome และ Brave แล้ว
+Extension รับ Facebook Content Pack และ Growth Pack แต่แทรกเฉพาะข้อความธรรมดา
+ลง editor ที่ผู้ใช้โฟกัส ไม่กด Post/Send/Schedule ผล Growth ที่ stale หรือ
+rejected แทรกไม่ได้; needs_review ต้องติ๊กยืนยันก่อน และการติ๊กไม่แทรกให้อัตโนมัติ
+
+ในแอปกด วิธีใช้ เพื่อเปิด React Joyride 8 ภารกิจ AI Studio รับสถานะงานจริงจาก
+facebook:ai-stage และ growth:ai-stage ตัวละครจึงเดิน นั่งทำงาน และส่งแฟ้มตาม
+stage จริง ไม่ใช่ timer จำลอง
+
+ตั้งค่า MCP ด้วยตนเอง
+---------------------
+ตัวติดตั้งไม่แก้ config ของ Claude Code หรือ Codex หากต้องการ reverse workflow
+ให้เพิ่ม native-host\content-blueprint-companion.exe เป็น MCP server ของ client
+ที่ใช้ Companion มี 7 tools:
+
+- Facebook: get_facebook_brief, save_facebook_pack,
+  get_latest_facebook_pack
+- Growth: list_growth_playbooks, get_growth_brief, save_growth_pack,
+  get_latest_growth_pack
+
+Growth Brief ส่ง exact revision, trusted task contract และ schema ที่จำกัดตาม
+Playbook/Brief ผลที่ผิด semantic contract ซ่อมได้ไม่เกินหนึ่งครั้งต่อ GrowthPack
+stage แล้วหยุดโดยไม่บันทึกหากยังผิด
+
+ขอบเขตข้อมูลและค่าคอม
+----------------------
+Leads & Commission คำนวณยอดประมาณการจากยอดและอัตราที่ผู้ใช้กรอก และเก็บยอดที่
+เจ้าของงานยืนยันแยกกัน ไม่มีการดึงยอดขายจาก Facebook, sales attribution, payout
+หรือ invoice reconciliation
+
+ข้อมูล public profile, Page, post หรือ comment ไม่ใช่ consent ให้เก็บข้อมูล
+รายบุคคลหรือเพิ่มเข้า audience โปรแกรมไม่ scrape ผู้ติดตาม คอมเมนต์ โปรไฟล์
+inbox หรือลูกค้าของเพจอื่น ใช้วางแผน retargeting/Lookalike/Advantage+ ได้เฉพาะ
+first-party/authorized sources ที่เจ้าของเพจมีสิทธิ์และอนุมัติ โปรแกรมไม่อัปโหลด
+audience และไม่เปิดแคมเปญ
+
+การถอนติดตั้ง
+-------------
+การถอนติดตั้งลบเฉพาะไฟล์โปรแกรม shortcut และค่า Native Messaging registry ที่ยัง
+ชี้มายังชุดติดตั้งนี้ Settings, Briefs, Content/Growth Packs, browser storage และ
+MCP configuration จะยังอยู่
+
+หากต้องการลบ MCP configuration ด้วย ให้เปิด PowerShell แล้วรัน:
+codex mcp remove content-blueprint-facebook
+claude mcp remove --scope user content-blueprint-facebook

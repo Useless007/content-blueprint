@@ -1,0 +1,203 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  core:
+    name: Go, frontend, and extension
+    runs-on: windows-latest
+    timeout-minutes: 25
+    env:
+      CI: "true"
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22.12.0
+          cache: npm
+          cache-dependency-path: |
+            frontend/package-lock.json
+            facebook-extension/package-lock.json
+
+      - name: Build frontend
+        working-directory: frontend
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          npm ci
+          if ($LASTEXITCODE -ne 0) { throw "frontend npm ci failed" }
+          npm run build
+          if ($LASTEXITCODE -ne 0) { throw "frontend build failed" }
+          npm run test:ui
+          if ($LASTEXITCODE -ne 0) { throw "frontend updater UI tests failed" }
+
+      - name: Verify release version declarations
+        shell: pwsh
+        run: .\build\verify-version.ps1
+
+      - name: Test and vet Go
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          go test ./...
+          if ($LASTEXITCODE -ne 0) { throw "go test failed" }
+          go vet ./...
+          if ($LASTEXITCODE -ne 0) { throw "go vet failed" }
+          go run golang.org/x/vuln/cmd/govulncheck@v1.7.0 ./...
+          if ($LASTEXITCODE -ne 0) { throw "govulncheck found a reachable vulnerability" }
+
+      - name: Test extension
+        working-directory: facebook-extension
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          npm ci
+          if ($LASTEXITCODE -ne 0) { throw "extension npm ci failed" }
+          npm test
+          if ($LASTEXITCODE -ne 0) { throw "extension tests failed" }
+          foreach ($file in @("service-worker.js", "sidepanel.js", "content-script.js", "src/core.js", "src/growth.js")) {
+            node --check $file
+            if ($LASTEXITCODE -ne 0) { throw "syntax check failed: $file" }
+          }
+
+  browser-smoke:
+    name: Chrome and Brave smoke
+    needs: core
+    runs-on: windows-latest
+    timeout-minutes: 35
+    env:
+      CI: "true"
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22.12.0
+          cache: npm
+          cache-dependency-path: |
+            frontend/package-lock.json
+            facebook-extension/package-lock.json
+
+      - name: Install browser-test dependencies
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          if (-not (Test-Path -LiteralPath "C:\Program Files\Google\Chrome\Application\chrome.exe" -PathType Leaf)) {
+            throw "Google Chrome is missing from the hosted runner"
+          }
+          if (-not (Test-Path -LiteralPath "C:\Program Files\BraveSoftware\Brave-Browser\Application\brave.exe" -PathType Leaf)) {
+            choco install brave -y --no-progress
+            if ($LASTEXITCODE -ne 0) { throw "Brave installation failed" }
+          }
+          npm ci --prefix frontend
+          if ($LASTEXITCODE -ne 0) { throw "frontend npm ci failed" }
+          npm ci --prefix facebook-extension
+          if ($LASTEXITCODE -ne 0) { throw "extension npm ci failed" }
+
+      - name: Build and register local companion
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          New-Item -ItemType Directory -Path build\bin -Force | Out-Null
+          go build -trimpath -o build\bin\content-blueprint-companion.exe .\cmd\content-blueprint-companion
+          if ($LASTEXITCODE -ne 0) { throw "companion build failed" }
+          .\facebook-extension\native-host\install-native-host.ps1
+
+      - name: Run extension E2E
+        working-directory: facebook-extension
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          npm run test:e2e
+          if ($LASTEXITCODE -ne 0) { throw "browser extension E2E failed" }
+
+      - name: Build frontend for UI smoke
+        working-directory: frontend
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          npm run build
+          if ($LASTEXITCODE -ne 0) { throw "frontend build failed" }
+
+      - name: Run Wails UI smoke
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $frontendDirectory = Join-Path $PWD "frontend"
+          $stdoutPath = Join-Path $env:RUNNER_TEMP "content-blueprint-preview.stdout.log"
+          $stderrPath = Join-Path $env:RUNNER_TEMP "content-blueprint-preview.stderr.log"
+          $preview = Start-Process -FilePath "npm.cmd" `
+            -ArgumentList @("run", "preview", "--", "--host", "127.0.0.1", "--port", "4173") `
+            -WorkingDirectory $frontendDirectory `
+            -RedirectStandardOutput $stdoutPath `
+            -RedirectStandardError $stderrPath `
+            -WindowStyle Hidden `
+            -PassThru
+          try {
+            $ready = $false
+            for ($attempt = 0; $attempt -lt 30; $attempt++) {
+              try {
+                $response = Invoke-WebRequest -Uri "http://127.0.0.1:4173" -TimeoutSec 2
+                if ($response.StatusCode -eq 200) { $ready = $true; break }
+              }
+              catch {
+                Start-Sleep -Seconds 1
+              }
+            }
+            if (-not $ready) {
+              Get-Content -LiteralPath $stdoutPath -ErrorAction SilentlyContinue
+              Get-Content -LiteralPath $stderrPath -ErrorAction SilentlyContinue
+              throw "frontend preview did not become ready"
+            }
+            Push-Location facebook-extension
+            try {
+              npm run test:wails-ui
+              if ($LASTEXITCODE -ne 0) { throw "Wails UI smoke failed" }
+            }
+            finally {
+              Pop-Location
+            }
+          }
+          finally {
+            if ($preview -and -not $preview.HasExited) {
+              Stop-Process -Id $preview.Id -Force
+            }
+          }
+
+      - name: Remove test Native Messaging registration
+        if: always()
+        shell: pwsh
+        run: .\facebook-extension\native-host\uninstall-native-host.ps1

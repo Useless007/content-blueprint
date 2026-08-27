@@ -1,0 +1,18 @@
+{
+  "name": "content-blueprint-facebook-extension",
+  "version": "0.3.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test",
+    "test:e2e": "node tests/e2e/browser-e2e.mjs",
+    "test:wails-ui": "node tests/e2e/wails-ui-smoke.mjs",
+    "test:watch": "node --test --watch"
+  },
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "devDependencies": {
+    "puppeteer-core": "^25.9.0"
+  }
+}

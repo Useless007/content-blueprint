@@ -1,0 +1,3 @@
+# Additive Growth Hub with trusted playbooks
+
+Content Blueprint will add a Growth Hub beside the existing Facebook and SEO workspaces instead of migrating those proven flows in the same release. Ten AI capabilities share a catalog-driven Workbench with server-owned prompts, a finite typed Growth Pack and revision-bound results; Lead/Commission, UTM and Experiment calculations remain deterministic modules outside the AI engine. This keeps many capabilities behind one small interface without accepting prompts or schemas from the frontend, and preserves the product rule that no Facebook/Google publish, message, edit or bulk-fetch action occurs without a future explicit integration and per-action human approval.

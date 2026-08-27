@@ -1,0 +1,58 @@
+name: Feature request
+description: เสนอ workflow ที่มีผู้ใช้อนุมัติก่อนทำงานภายนอก
+title: "[Feature]: "
+labels:
+  - enhancement
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: งานซ้ำหรือปัญหาที่ต้องการแก้
+      description: อธิบายขั้นตอนปัจจุบันและคนที่เจอปัญหา
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Workflow ที่เสนอ
+      description: ระบุ input, output และจุดที่ผู้ใช้ต้องตรวจหรือยืนยัน
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: พื้นที่หลัก
+      options:
+        - Facebook Content
+        - Growth / Sales operations
+        - SEO
+        - AI Studio / onboarding
+        - Claude / Codex CLI
+        - MCP
+        - Chrome / Brave extension
+        - Installer / updater
+        - Developer experience
+    validations:
+      required: true
+  - type: textarea
+    id: data
+    attributes:
+      label: แหล่งข้อมูลและสิทธิ์
+      description: ข้อมูลมาจากไหน ใครอนุญาต และเก็บไว้นานเท่าไร ระบุว่าไม่มีข้อมูลส่วนบุคคลถ้าไม่ใช้
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: วิธีที่ใช้อยู่หรือทางเลือกอื่น
+  - type: checkboxes
+    id: boundaries
+    attributes:
+      label: ขอบเขตโครงการ
+      options:
+        - label: Feature นี้ไม่ scrape โปรไฟล์ ผู้ติดตาม ปฏิกิริยา คอมเมนต์ inbox หรือฐานลูกค้าของผู้อื่น
+          required: true
+        - label: Feature นี้ไม่โพสต์ ส่งข้อความ อัปโหลด audience หรือติดตั้ง update โดยไม่มีการยืนยันจากผู้ใช้
+          required: true
+        - label: ฉันไม่ได้แนบ secret หรือข้อมูลลูกค้าจริง
+          required: true

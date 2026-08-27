@@ -1,0 +1,93 @@
+name: Bug report
+description: รายงานพฤติกรรมที่ทำซ้ำได้ด้วยข้อมูลสังเคราะห์
+title: "[Bug]: "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ขอบคุณที่ช่วยตรวจปัญหา อย่าแนบ token, cookie, API key, customer data, Brief จริง หรือ path ที่ระบุตัวบุคคล ปัญหาความปลอดภัยให้ใช้ช่องทางใน SECURITY.md
+  - type: input
+    id: version
+    attributes:
+      label: Content Blueprint version
+      description: ดูจากหน้า About/Update หรือชื่อ GitHub Release เช่น 0.3.0
+      placeholder: 0.3.0
+    validations:
+      required: true
+  - type: dropdown
+    id: install
+    attributes:
+      label: วิธีติดตั้ง
+      options:
+        - GitHub Release installer
+        - Built from source
+        - Wails dev
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      description: Windows, Chrome/Brave, Go/Node และ provider CLI versions ที่เกี่ยวข้อง
+      placeholder: Windows 11 24H2; Chrome 140; Codex CLI ...
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: พื้นที่ที่พบปัญหา
+      options:
+        - Facebook Workspace
+        - Growth Hub
+        - SEO Workspace
+        - AI Studio / Joyride
+        - Claude or Codex CLI
+        - MCP companion
+        - Chrome or Brave extension
+        - Installer or updater
+        - Development or CI
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: ขั้นตอนที่ทำให้เกิดปัญหา
+      description: ใช้ข้อมูลสังเคราะห์ที่คนอื่นทำตามได้
+      placeholder: |
+        1. เปิด ...
+        2. เลือก ...
+        3. กด ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: ผลที่คาดไว้
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: ผลที่เกิดขึ้น
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Log หรือภาพที่ลบข้อมูลส่วนตัวแล้ว
+      description: ลบ Brief, provider output, username, local path, customer data และ credentials ก่อนแนบ
+      render: text
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: ตรวจแล้ว
+      options:
+        - label: ฉันลองกับ release ล่าสุดหรือยืนยันแล้วว่ายังเกิดใน main
+          required: true
+        - label: ตัวอย่างและไฟล์แนบไม่มี secret หรือข้อมูลลูกค้าจริง
+          required: true
+        - label: ปัญหานี้ไม่ใช่ช่องโหว่ที่ควรรายงานแบบส่วนตัว
+          required: true
