@@ -386,7 +386,7 @@ func TestVerifiedDownloadCanLaunchOnlyItsBackendOwnedPath(t *testing.T) {
 	if filepath.Base(launchedPath) != installerAsset {
 		t.Fatalf("launched path = %q", launchedPath)
 	}
-	relative, err := filepath.Rel(root, launchedPath)
+	relative, err := filepath.Rel(manager.temporaryRoot, launchedPath)
 	if err != nil || relative == ".." || strings.HasPrefix(relative, ".."+string(filepath.Separator)) {
 		t.Fatalf("launcher received path outside backend temp root: %q", launchedPath)
 	}
