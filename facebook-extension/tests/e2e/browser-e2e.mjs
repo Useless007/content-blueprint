@@ -22,15 +22,35 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const EXTENSION_ROOT = resolve(HERE, "../..");
 const REPO_ROOT = resolve(EXTENSION_ROOT, "..");
 
+function browserPaths(environmentOverride, vendorPath, executableName) {
+  return Object.freeze(
+    [
+      process.env[environmentOverride],
+      join(process.env.ProgramFiles ?? "C:\\Program Files", vendorPath, executableName),
+      join(process.env["ProgramFiles(x86)"] ?? "C:\\Program Files (x86)", vendorPath, executableName),
+      process.env.LOCALAPPDATA
+        ? join(process.env.LOCALAPPDATA, vendorPath, executableName)
+        : null,
+    ].filter((path, index, paths) => path && paths.indexOf(path) === index),
+  );
+}
+
 const BROWSERS = Object.freeze([
   {
     name: "chrome",
-    executablePath: "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
+    executablePaths: browserPaths(
+      "CONTENT_BLUEPRINT_CHROME_PATH",
+      "Google\\Chrome\\Application",
+      "chrome.exe",
+    ),
   },
   {
     name: "brave",
-    executablePath:
-      "C:\\Program Files\\BraveSoftware\\Brave-Browser\\Application\\brave.exe",
+    executablePaths: browserPaths(
+      "CONTENT_BLUEPRINT_BRAVE_PATH",
+      "BraveSoftware\\Brave-Browser\\Application",
+      "brave.exe",
+    ),
   },
 ]);
 
@@ -339,10 +359,16 @@ async function seedGrowthState(dataDirectory, browserName, { brief = GROWTH_BRIE
 }
 
 async function runBrowser(browser, fixtureURL) {
-  assert.equal(
-    await exists(browser.executablePath),
-    true,
-    `${browser.name} executable is missing: ${browser.executablePath}`,
+  let executablePath = null;
+  for (const candidate of browser.executablePaths) {
+    if (await exists(candidate)) {
+      executablePath = candidate;
+      break;
+    }
+  }
+  assert.ok(
+    executablePath,
+    `${browser.name} executable is missing; checked: ${browser.executablePaths.join(", ")}`,
   );
   const temporaryRoot = await mkdtemp(join(tmpdir(), `content-blueprint-${browser.name}-`));
   const profileDirectory = join(temporaryRoot, "profile");
@@ -354,7 +380,7 @@ async function runBrowser(browser, fixtureURL) {
 
   try {
     browserProcess = await puppeteer.launch({
-      executablePath: browser.executablePath,
+      executablePath,
       browser: "chrome",
       headless: true,
       acceptInsecureCerts: true,
