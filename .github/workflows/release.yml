@@ -536,7 +536,13 @@ jobs:
             "--title", "Content Blueprint $env:RELEASE_TAG"
           )
           $notesPath = "docs/release-notes/$env:RELEASE_TAG.md"
+          $expectedNotes = $null
           if (Test-Path -LiteralPath $notesPath -PathType Leaf) {
+            $resolvedNotesPath = (Resolve-Path -LiteralPath $notesPath).Path
+            $expectedNotes = [IO.File]::ReadAllText(
+              $resolvedNotesPath,
+              [Text.UTF8Encoding]::new($false, $true)
+            )
             $ghArgs += @("--notes-file", $notesPath)
           }
           else {
@@ -545,9 +551,16 @@ jobs:
           gh @ghArgs
           if ($LASTEXITCODE -ne 0) { throw "Draft release creation failed" }
 
-          $release = gh release view $env:RELEASE_TAG --repo $env:GH_REPO --json tagName,isDraft,assets | ConvertFrom-Json
+          $release = gh release view $env:RELEASE_TAG --repo $env:GH_REPO --json tagName,isDraft,assets,body | ConvertFrom-Json
           if ($release.tagName -cne $env:RELEASE_TAG -or -not $release.isDraft) {
             throw "Release identity or draft state is invalid"
+          }
+          if ($null -ne $expectedNotes) {
+            $expectedBody = $expectedNotes.Replace("`r`n", "`n").TrimEnd([char[]]"`r`n")
+            $actualBody = ([string]$release.body).Replace("`r`n", "`n").TrimEnd([char[]]"`r`n")
+            if ($actualBody -cne $expectedBody) {
+              throw "Draft release notes do not match the UTF-8 source file"
+            }
           }
           $expectedNames = @(
             "content-blueprint-amd64-installer.exe",
