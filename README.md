@@ -11,7 +11,9 @@
 
 Content Blueprint เป็นแอป Go + Wails ที่เก็บ Brief และชิ้นงานไว้ในเครื่อง เรียก Claude Code หรือ Codex CLI ที่คุณล็อกอินไว้แล้ว และส่งผลผ่านสัญญาข้อมูลที่ Go ตรวจซ้ำ แอปไม่ล็อกอิน Facebook, ไม่ scrape โปรไฟล์หรือฐานลูกค้า, ไม่ส่งข้อความ และไม่กดเผยแพร่แทนผู้ใช้
 
-[ดาวน์โหลดรุ่นล่าสุด](https://github.com/Useless007/content-blueprint/releases/latest) · [เริ่มใช้ใน 5 นาที](docs/quick-start.md) · [ขอบเขตข้อมูลส่วนตัว](docs/privacy.md) · [สถาปัตยกรรม](docs/architecture.md)
+[ดาวน์โหลดตัวติดตั้ง Windows](https://github.com/Useless007/content-blueprint/releases/latest/download/content-blueprint-amd64-installer.exe) · [ดาวน์โหลด SHA256SUMS](https://github.com/Useless007/content-blueprint/releases/latest/download/SHA256SUMS.txt) · [ดู Release notes](https://github.com/Useless007/content-blueprint/releases/latest) · [เริ่มใช้ใน 5 นาที](docs/quick-start.md)
+
+[ขอบเขตข้อมูลส่วนตัว](docs/privacy.md) · [สถาปัตยกรรม](docs/architecture.md)
 
 ## ติดตั้งบน Windows
 
