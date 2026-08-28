@@ -6,9 +6,9 @@
   "minimum_chrome_version": "114",
   "description": "สร้าง ตรวจทาน และแทรกร่างคอนเทนต์ใน Facebook โดยผู้ใช้เป็นคนกดโพสต์เอง",
   "icons": {
-    "16": "icon.png",
-    "32": "icon.png",
-    "48": "icon.png",
+    "16": "icon-16.png",
+    "32": "icon-32.png",
+    "48": "icon-48.png",
     "128": "icon.png"
   },
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAvwoOesdnCO/yMRtyVtVOQ2m+LkwLE+jcRuShzBH/cZsVDL0SAqCPi9Bk9WCyMRpmbIAuH0y+10EgZ5p8qqA69+S1nX9ZHlboSNSqaE/Pjki0mxvA+XTp1mntQFA7fQYL1VbZhZM3Cs/od1T/R2cxWET6F5QyhR3awkQaxzMxIbkyDADvlNJBY/WPkZMmecSSSQY39wD8eHUlYe0uadytj4p5wWPv0goGoyvCThLlO8m3K+GZct4fovaNsC7VZWo5S60jxjsFXfFVMMQAqIQSI2/ImZhFs9KyNKM3eK1QG63W0P2Wr+A3QGj9rJ7c0X+Q9B6S70afjChNUIL+WefUfwIDAQAB",
@@ -28,8 +28,8 @@
   "action": {
     "default_title": "เปิด Content Blueprint",
     "default_icon": {
-      "16": "icon.png",
-      "32": "icon.png"
+      "16": "icon-16.png",
+      "32": "icon-32.png"
     }
   },
   "side_panel": {

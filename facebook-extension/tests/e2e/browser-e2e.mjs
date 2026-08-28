@@ -164,6 +164,16 @@ async function createTemporaryExtension(root) {
     "production manifest must not grant localhost permissions",
   );
   const manifest = JSON.parse(productionText);
+  const iconPaths = new Set(Object.values(manifest.icons ?? {}));
+  const actionIcons = manifest.action?.default_icon;
+  if (typeof actionIcons === "string") {
+    iconPaths.add(actionIcons);
+  } else {
+    for (const path of Object.values(actionIcons ?? {})) iconPaths.add(path);
+  }
+  for (const path of iconPaths) {
+    await cp(join(EXTENSION_ROOT, path), join(destination, path));
+  }
   const localMatches = [
     "http://127.0.0.1/*",
     "https://127.0.0.1/*",

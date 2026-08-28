@@ -73,6 +73,9 @@ if ([string]::IsNullOrWhiteSpace([string]$makeNSIS) -or
 
 $extensionFiles = @(
     "manifest.json",
+    "icon-16.png",
+    "icon-32.png",
+    "icon-48.png",
     "icon.png",
     "service-worker.js",
     "content-script.js",
@@ -196,6 +199,9 @@ if ($archiveLister) {
         "native-host\content-blueprint-companion.exe",
         "native-host\com.contentblueprint.facebook.json",
         "facebook-extension\manifest.json",
+        "facebook-extension\icon-16.png",
+        "facebook-extension\icon-32.png",
+        "facebook-extension\icon-48.png",
         "facebook-extension\icon.png",
         "facebook-extension\service-worker.js",
         "facebook-extension\content-script.js",
