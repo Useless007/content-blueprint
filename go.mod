@@ -3,7 +3,7 @@ module ContentBlueprint
 go 1.26.7
 
 require (
-	github.com/modelcontextprotocol/go-sdk v1.7.0
+	github.com/modelcontextprotocol/go-sdk v1.8.0
 	github.com/wailsapp/wails/v2 v2.15.0
 	golang.org/x/net v0.58.0
 )
